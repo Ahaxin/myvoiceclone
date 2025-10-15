@@ -1,0 +1,5 @@
+TTS>=0.14.5
+sounddevice>=0.4.6
+soundfile>=0.12.1
+gradio>=3.50
+numpy>=1.23
