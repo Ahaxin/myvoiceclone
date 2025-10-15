@@ -27,6 +27,9 @@ MyVoiceClone is a small demo project that records a short reference clip from a 
 > **Note**
 > The XTTS model is large (~1.5 GB). The first run may take a few minutes while it downloads.
 
+Generated audio is stored in the `voices/` directory (and any `.wav` exports you create).
+These artefacts are ignored by git via the provided `.gitignore` so that cloned profiles do
+not accidentally get committed.
 ## Command line interface
 
 The CLI wraps the `VoiceCloneService` class located in `voice_clone/clone.py`.

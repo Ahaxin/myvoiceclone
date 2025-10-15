@@ -85,7 +85,7 @@ def launch_gui(service: VoiceCloneService) -> None:
             """
             # MyVoiceClone
             1. Enter a speaker id (e.g. your name).
-            2. Record or upload a short reference clip by reading a few sentences.
+            2. Record or upload a ~20–30 second reference clip using the scripted prompt or free speech.
             3. Provide text and choose the output language (English, 中文, or Nederlands).
             4. Click **Generate Speech** to hear the cloned voice.
             """
@@ -99,6 +99,22 @@ def launch_gui(service: VoiceCloneService) -> None:
                 choices=list(ENGINE_LABELS.keys()), value=DEFAULT_ENGINE_LABEL, label="TTS Engine"
             )
         reference = gr.Audio(sources=["microphone", "upload"], type="numpy", label="Reference sample")
+        reference_style = gr.Radio(
+            choices=list(REFERENCE_STYLE_LABELS.keys()),
+            value=DEFAULT_REFERENCE_STYLE_LABEL,
+            label="Reference style",
+        )
+        reference_prompt = gr.Textbox(
+            label="Suggested script",
+            value=get_reference_prompt("en"),
+            interactive=False,
+            lines=3,
+            show_copy_button=True,
+        )
+        random_prompt_button = gr.Button("New scripted prompt")
+        reference_instructions = gr.Markdown(
+            "Read the script aloud for about 20-30 seconds. Switch to *Free speech sample* if you prefer to improvise.",
+        )
         description = gr.Textbox(label="Description", placeholder="Optional notes about the voice", lines=1)
         text = gr.Textbox(label="Text to speak", placeholder="请输入文本 / Voer tekst in / Enter text", lines=4)
         generate_button = gr.Button("Generate Speech")
@@ -108,6 +124,45 @@ def launch_gui(service: VoiceCloneService) -> None:
             generate,
             inputs=[text, language, engine, speaker, reference, description],
             outputs=output_audio,
+        )
+
+        def _build_prompt(language_label: str, style_label: str, randomise: bool = False) -> tuple[str, str]:
+            language_code = LANGUAGE_LABELS[language_label]
+            style = REFERENCE_STYLE_LABELS[style_label]
+            if style == "scripted":
+                script = get_reference_prompt(language_code, randomise=randomise)
+                instruction = (
+                    "Read the script aloud for about 20-30 seconds. A clear recording with minimal background noise gives the best results."
+                )
+            else:
+                script = (
+                    "Speak naturally for 20-30 seconds about any topic—describe your day, narrate a story, or read any passage you like."
+                )
+                instruction = (
+                    "Keep your voice steady and expressive. Mixing different tones and pacing helps the model capture your style."
+                )
+            return script, instruction
+
+        def update_reference_prompt(language_label: str, style_label: str) -> tuple[str, str]:
+            return _build_prompt(language_label, style_label)
+
+        def randomise_prompt(language_label: str, style_label: str) -> tuple[str, str]:
+            return _build_prompt(language_label, style_label, randomise=True)
+
+        language.change(
+            update_reference_prompt,
+            inputs=[language, reference_style],
+            outputs=[reference_prompt, reference_instructions],
+        )
+        reference_style.change(
+            update_reference_prompt,
+            inputs=[language, reference_style],
+            outputs=[reference_prompt, reference_instructions],
+        )
+        random_prompt_button.click(
+            randomise_prompt,
+            inputs=[language, reference_style],
+            outputs=[reference_prompt, reference_instructions],
         )
 
     demo.launch()
@@ -134,6 +189,27 @@ def cli(argv: list[str] | None = None) -> None:
     record_parser = subparsers.add_parser("record", help="Record a new voice reference from the microphone")
     record_parser.add_argument("speaker", help="Identifier for the speaker (e.g. alice)")
     record_parser.add_argument("--description", default="", help="Free form description for the voice")
+    record_parser.add_argument(
+        "--language",
+        default="en",
+        choices=CLI_LANGUAGE_CHOICES,
+        help="Language of the reference script or freeform speech",
+    )
+    record_parser.add_argument(
+        "--freeform",
+        action="store_true",
+        help="Record a spontaneous sample instead of reading the scripted prompt",
+    )
+    record_parser.add_argument(
+        "--random-prompt",
+        action="store_true",
+        help="Pick a different scripted prompt at random",
+    )
+    record_parser.add_argument(
+        "--prompt-text",
+        default=None,
+        help="Custom text to display when recording. Overrides the preset prompts.",
+    )
 
     list_parser = subparsers.add_parser("list", help="List stored voice profiles")
 
@@ -193,3 +269,4 @@ def cli(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     cli()
+
