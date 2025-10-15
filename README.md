@@ -15,10 +15,40 @@ MyVoiceClone is a small demo project that records a short reference clip from a 
 1. Create a virtual environment and install dependencies:
 
    ```bash
+   # macOS / Linux (bash)
    python -m venv .venv
+   py -3.11 -m venv .venv
    source .venv/bin/activate
+
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   .\.venv\Scripts\Activate.ps1     
    pip install -r requirements.txt
    ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   # Use 64-bit Python 3.11 for best compatibility
+   py -3.11 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   # If scripts are blocked: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+   # Upgrade build tools
+   python -m pip install -U pip setuptools wheel
+
+   # Install PyTorch first (choose one):
+   # CPU only:
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+   # NVIDIA GPU (CUDA 12.1):
+   # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+   # Then install the rest
+   pip install -r requirements.txt
+   ```
+
+   Notes:
+   - Recommended Python: 3.10 or 3.11 (64‑bit). TTS wheels may be unavailable on 3.12+ for Windows.
+   - If you still see “No matching distribution found for TTS”, try: `pip install "TTS==0.15.3"` before installing the rest.
 
 2. (Optional) Confirm that your microphone works with the `sounddevice` package.
 

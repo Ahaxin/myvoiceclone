@@ -56,34 +56,6 @@ def _save_gradio_audio(audio: Optional[tuple[int, np.ndarray]]) -> Optional[Path
 def launch_gui(service: VoiceCloneService) -> None:
     """Launch a Gradio based GUI for recording and synthesising voices."""
 
-    def _set_last_language(speaker_id: str, language_code: str) -> None:
-        try:
-            meta_path = service.base_dir / speaker_id / "metadata.json"
-            meta: Dict[str, object] = {}
-            if meta_path.exists():
-                meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            meta["speaker_id"] = speaker_id
-            if "description" not in meta:
-                meta["description"] = ""
-            meta["last_language"] = language_code
-            meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            # Non-fatal
-            pass
-
-    def _get_last_language_label(speaker_id: str) -> Optional[str]:
-        try:
-            meta_path = service.base_dir / speaker_id / "metadata.json"
-            if not meta_path.exists():
-                return None
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            code = meta.get("last_language")
-            if isinstance(code, str) and code in SUPPORTED_LANGUAGES:
-                return SUPPORTED_LANGUAGES[code]["label"]
-        except Exception:
-            pass
-        return None
-
     def generate(
         text: str,
         language_label: str,
@@ -107,7 +79,6 @@ def launch_gui(service: VoiceCloneService) -> None:
         if reference_path is not None:
             service.save_uploaded_reference(speaker_id, reference_path, description)
         rate, data = service.synthesize(speaker_id, text, language)
-        _set_last_language(speaker_id, language)
         return rate, data
 
     with gr.Blocks(title="MyVoiceClone") as demo:
@@ -115,25 +86,25 @@ def launch_gui(service: VoiceCloneService) -> None:
             """
             # MyVoiceClone
             1. Enter a speaker id (e.g. your name).
-            2. Record or upload a ~20-30 second reference clip using the scripted prompt or free speech.
+            2. Record or upload a ~20�?0 second reference clip using the scripted prompt or free speech.
             3. Provide text and choose the output language (English, 中文, or Nederlands).
             4. Click **Generate Speech** to hear the cloned voice.
             """
         )
         with gr.Row():
-            existing_speakers = gr.Dropdown(
-                choices=[v.speaker_id for v in service.list_voices()],
-                label="Existing Speakers",
-            )
-            refresh_speakers = gr.Button("Refresh Speakers")
             speaker = gr.Textbox(label="Speaker ID", placeholder="jane_doe")
-        with gr.Row():
             language = gr.Dropdown(
                 choices=list(LANGUAGE_LABELS.keys()), value=DEFAULT_LANGUAGE_LABEL, label="Language"
             )
             engine = gr.Dropdown(
                 choices=list(ENGINE_LABELS.keys()), value=DEFAULT_ENGINE_LABEL, label="TTS Engine"
             )
+        with gr.Row():
+            existing_speakers = gr.Dropdown(
+                choices=[v.speaker_id for v in service.list_voices()],
+                label="Existing Speakers",
+            )
+            refresh_speakers = gr.Button("Refresh Speakers")
         reference = gr.Audio(sources=["microphone", "upload"], type="numpy", label="Reference sample")
         reference_style = gr.Radio(
             choices=list(REFERENCE_STYLE_LABELS.keys()),
@@ -149,12 +120,12 @@ def launch_gui(service: VoiceCloneService) -> None:
         )
         random_prompt_button = gr.Button("New scripted prompt")
         reference_instructions = gr.Markdown(
-            "Read the script aloud for about 20-30 seconds. Switch to Free speech sample if you prefer to improvise.",
+            "Read the script aloud for about 20-30 seconds. Switch to *Free speech sample* if you prefer to improvise.",
         )
         save_status = gr.Markdown(visible=False)
         reference_status = gr.Markdown(visible=False)
         description = gr.Textbox(label="Description", placeholder="Optional notes about the voice", lines=1)
-        text = gr.Textbox(label="Text to speak", placeholder="请输入文本 / Voer tekst in / Enter text", lines=4)
+        text = gr.Textbox(label="Text to speak", placeholder="请输入文�?/ Voer tekst in / Enter text", lines=4)
         with gr.Row():
             save_button = gr.Button("Save Reference Only")
             generate_button = gr.Button("Generate Speech")
@@ -173,7 +144,7 @@ def launch_gui(service: VoiceCloneService) -> None:
             if ref.exists():
                 return gr.update(
                     visible=True,
-                    value=f"Found existing reference for '{speaker_id}' at '{ref}'. You can generate without re-recording.",
+                    value=f"�?Found existing reference for '<code>{speaker_id}</code>' at <code>{ref}</code>. You can generate without re-recording.",
                 )
             return gr.update(visible=False)
 
@@ -181,22 +152,38 @@ def launch_gui(service: VoiceCloneService) -> None:
 
         def choose_existing(sel: str):
             if not sel:
-                return gr.update(), gr.update(), gr.update(visible=False)
-            # Update language if metadata has last_language
-            lang_label = _get_last_language_label(sel)
-            lang_update = gr.update(value=lang_label) if lang_label else gr.update()
-            return gr.update(value=sel), lang_update, check_reference_status(sel)
+                return gr.update(), gr.update(visible=False)
+            return gr.update(value=sel), check_reference_status(sel)
 
         existing_speakers.change(
             choose_existing,
             inputs=[existing_speakers],
-            outputs=[speaker, language, reference_status],
+            outputs=[speaker, reference_status],
         )
 
         def refresh_existing():
             return gr.update(choices=[v.speaker_id for v in service.list_voices()])
 
         refresh_speakers.click(refresh_existing, inputs=None, outputs=existing_speakers)
+
+        def save_only(speaker_id: str, reference_audio, description: str):
+            if not speaker_id:
+                raise gr.Error("Please enter a speaker id (e.g. your name).")
+            reference_path = _save_gradio_audio(reference_audio)
+            if reference_path is None:
+                raise gr.Error("Please record or upload a reference sample to save.")
+            service.save_uploaded_reference(speaker_id, reference_path, description)
+            return gr.update(
+                visible=True,
+                value=f"💾 Saved reference for '<code>{speaker_id}</code>'. You can now generate without re-recording.",
+            )
+
+        save_button.click(
+            save_only,
+            inputs=[speaker, reference, description],
+            outputs=save_status,
+        )
+        
 
         def _build_prompt(language_label: str, style_label: str, randomise: bool = False) -> tuple[str, str]:
             language_code = LANGUAGE_LABELS[language_label]
@@ -235,29 +222,6 @@ def launch_gui(service: VoiceCloneService) -> None:
             randomise_prompt,
             inputs=[language, reference_style],
             outputs=[reference_prompt, reference_instructions],
-        )
-
-        def save_only(speaker_id: str, reference_audio, description: str, language_label: str):
-            if not speaker_id:
-                raise gr.Error("Please enter a speaker id (e.g. your name).")
-            reference_path = _save_gradio_audio(reference_audio)
-            if reference_path is None:
-                raise gr.Error("Please record or upload a reference sample to save.")
-            service.save_uploaded_reference(speaker_id, reference_path, description)
-            try:
-                lang_code = LANGUAGE_LABELS[language_label]
-            except KeyError:
-                lang_code = "en"
-            _set_last_language(speaker_id, lang_code)
-            return gr.update(
-                visible=True,
-                value=f"Saved reference for '{speaker_id}'. You can now generate without re-recording.",
-            )
-
-        save_button.click(
-            save_only,
-            inputs=[speaker, reference, description, language],
-            outputs=save_status,
         )
 
     # Launch the app; disable analytics when supported, otherwise fall back.
