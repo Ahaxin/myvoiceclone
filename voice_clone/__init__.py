@@ -4,8 +4,11 @@ from .clone import (
     AVAILABLE_ENGINES,
     DEFAULT_ENGINE,
     LANGUAGE_ALIASES,
+    REFERENCE_PROMPTS,
     SUPPORTED_LANGUAGES,
     VoiceCloneService,
+    get_reference_prompt,
+    normalise_language,
 )
 
 __all__ = [
@@ -14,4 +17,7 @@ __all__ = [
     "AVAILABLE_ENGINES",
     "DEFAULT_ENGINE",
     "LANGUAGE_ALIASES",
+    "normalise_language",
+    "get_reference_prompt",
+    "REFERENCE_PROMPTS",
 ]

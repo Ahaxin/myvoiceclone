@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,49 @@ LANGUAGE_ALIASES: Dict[str, str] = {
     "dutch": "nl",
     "nl-nl": "nl",
 }
+
+
+def normalise_language(language: str) -> str:
+    """Convert a language alias to one of the supported canonical codes."""
+
+    code = language.lower()
+    if code in SUPPORTED_LANGUAGES:
+        return code
+    alias = LANGUAGE_ALIASES.get(code)
+    if alias and alias in SUPPORTED_LANGUAGES:
+        return alias
+    raise ValueError(
+        f"Unsupported language '{language}'. Choose from: {', '.join(SUPPORTED_LANGUAGES)}"
+    )
+
+
+REFERENCE_PROMPTS: Dict[str, list[str]] = {
+    "en": [
+        "The quick brown fox jumps over the lazy dog while clear bells ring in the distant valley.",
+        "Technology moves quickly, but a calm voice can make even complex topics feel simple.",
+        "Please read this short script so we can learn the tone, pacing, and clarity of your voice.",
+    ],
+    "zh": [
+        "欢迎来到语音克隆演示，请保持自然语速并清晰地朗读每一个词。",
+        "普通话的声调很重要，请在安静的环境里朗读这段文字。",
+        "请在二十秒内介绍一下自己，保持声音稳定而自然。",
+    ],
+    "nl": [
+        "Welkom bij deze stemklonende demo, spreek rustig en duidelijk elke zin uit.",
+        "Vertel in je eigen woorden wat je vandaag van plan bent, met een natuurlijke intonatie.",
+        "Lees deze korte tekst voor zodat we jouw stemkleur goed kunnen vastleggen.",
+    ],
+}
+
+
+def get_reference_prompt(language: str = "en", randomise: bool = False) -> str:
+    """Return a suggested script for recording a reference sample."""
+
+    canonical_language = normalise_language(language)
+    options = REFERENCE_PROMPTS[canonical_language]
+    if randomise and len(options) > 1:
+        return random.choice(options)
+    return options[0]
 
 AVAILABLE_ENGINES: Dict[str, str] = {
     "xtts_v2": "tts_models/multilingual/multi-dataset/xtts_v2",
@@ -59,7 +103,7 @@ class VoiceCloneService:
         model_name: str | None = None,
         base_dir: str | Path = "voices",
         sample_rate: int = 16000,
-        record_seconds: int = 10,
+        record_seconds: int = 20,
         use_cuda: bool | None = None,
     ) -> None:
         self.engine = engine
@@ -138,17 +182,60 @@ class VoiceCloneService:
     # ------------------------------------------------------------------
     # Recording helpers
     # ------------------------------------------------------------------
-    def record_reference(self, speaker_id: str, description: str = "") -> VoiceProfile:
-        """Record a reference sample from the microphone."""
+    def record_reference(
+        self,
+        speaker_id: str,
+        description: str = "",
+        language: str = "en",
+        scripted: bool = True,
+        prompt_text: str | None = None,
+        random_prompt: bool = False,
+    ) -> VoiceProfile:
+        """Record a reference sample from the microphone.
+
+        Parameters
+        ----------
+        speaker_id:
+            Identifier used to store the recorded sample.
+        description:
+            Optional notes saved alongside the profile.
+        language:
+            Language the speaker will use for the prompt/freeform speech.
+        scripted:
+            When True, display a suggested script to read. When False, instruct the
+            speaker to talk naturally.
+        prompt_text:
+            Custom text to display instead of the built-in prompts.
+        random_prompt:
+            If True, choose one of the built-in prompts at random for additional variety.
+        """
 
         directory = self._voice_dir(speaker_id)
         directory.mkdir(parents=True, exist_ok=True)
         reference_file = directory / "reference.wav"
 
-        print(
-            "Recording reference for speaker '%s'. Please read a short paragraph clearly.\n"
-            "Recording will last %s seconds..." % (speaker_id, self.record_seconds)
-        )
+        canonical_language = normalise_language(language)
+        if scripted:
+            script = prompt_text or get_reference_prompt(canonical_language, randomise=random_prompt)
+            print(
+                (
+                    "Recording reference for speaker '{speaker}'. Please read the script aloud clearly.\n"
+                    "Suggested text ({language}):\n{script}\n"
+                    "Recording will last {seconds} seconds..."
+                ).format(
+                    speaker=speaker_id,
+                    language=canonical_language,
+                    script=script,
+                    seconds=self.record_seconds,
+                )
+            )
+        else:
+            print(
+                "Recording reference for speaker '%s'. Speak naturally for %s seconds.\n"
+                "Try to include a mix of tones, pacing, and intonation so the model learns your style."
+                % (speaker_id, self.record_seconds)
+            )
+
         audio = sd.rec(int(self.sample_rate * self.record_seconds), samplerate=self.sample_rate, channels=1)
         sd.wait()
         sf.write(reference_file, audio, self.sample_rate)
@@ -174,7 +261,7 @@ class VoiceCloneService:
     ) -> Path:
         """Generate speech for the given text using the cloned voice."""
 
-        canonical_language = self._normalise_language(language)
+        canonical_language = normalise_language(language)
         tts_language_code = SUPPORTED_LANGUAGES[canonical_language]["tts_code"]
 
         voice_dir = self._voice_dir(speaker_id)
@@ -200,18 +287,6 @@ class VoiceCloneService:
         data, rate = sf.read(file_path)
         return rate, data
 
-    def _normalise_language(self, language: str) -> str:
-        code = language.lower()
-        if code in SUPPORTED_LANGUAGES:
-            return code
-        alias = LANGUAGE_ALIASES.get(code)
-        if alias and alias in SUPPORTED_LANGUAGES:
-            return alias
-        raise ValueError(
-            f"Unsupported language '{language}'. Choose from: {', '.join(SUPPORTED_LANGUAGES)}"
-        )
-
-
 __all__ = [
     "VoiceCloneService",
     "SUPPORTED_LANGUAGES",
@@ -219,4 +294,7 @@ __all__ = [
     "AVAILABLE_ENGINES",
     "DEFAULT_ENGINE",
     "VoiceProfile",
+    "normalise_language",
+    "get_reference_prompt",
+    "REFERENCE_PROMPTS",
 ]

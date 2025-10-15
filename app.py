@@ -17,6 +17,7 @@ from voice_clone import (
     LANGUAGE_ALIASES,
     SUPPORTED_LANGUAGES,
     VoiceCloneService,
+    get_reference_prompt,
 )
 
 
@@ -34,6 +35,13 @@ ENGINE_LABELS: Dict[str, str] = {
 }
 DEFAULT_ENGINE_LABEL = ENGINE_DISPLAY_NAMES.get(DEFAULT_ENGINE, DEFAULT_ENGINE)
 
+REFERENCE_STYLE_LABELS: Dict[str, str] = {
+    "Scripted reference (recommended)": "scripted",
+    "Free speech sample": "free",
+}
+
+DEFAULT_REFERENCE_STYLE_LABEL = "Scripted reference (recommended)"
+
 
 def _save_gradio_audio(audio: Optional[tuple[int, np.ndarray]]) -> Optional[Path]:
     if audio is None:
@@ -47,7 +55,14 @@ def _save_gradio_audio(audio: Optional[tuple[int, np.ndarray]]) -> Optional[Path
 def launch_gui(service: VoiceCloneService) -> None:
     """Launch a Gradio based GUI for recording and synthesising voices."""
 
-    def generate(text: str, language_label: str, engine_label: str, speaker_id: str, reference_audio, description: str):
+    def generate(
+        text: str,
+        language_label: str,
+        engine_label: str,
+        speaker_id: str,
+        reference_audio,
+        description: str,
+    ):
         if not speaker_id:
             raise gr.Error("Please enter a speaker id (e.g. your name).")
         try:
@@ -145,7 +160,14 @@ def cli(argv: list[str] | None = None) -> None:
     )
 
     if args.command == "record":
-        profile = service.record_reference(args.speaker, description=args.description)
+        profile = service.record_reference(
+            args.speaker,
+            description=args.description,
+            language=args.language,
+            scripted=not args.freeform,
+            prompt_text=args.prompt_text,
+            random_prompt=args.random_prompt,
+        )
         print(f"Recorded reference stored at {profile.reference_path}")
     elif args.command == "list":
         for voice in service.list_voices():

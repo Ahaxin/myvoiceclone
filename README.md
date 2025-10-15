@@ -4,7 +4,7 @@ MyVoiceClone is a small demo project that records a short reference clip from a 
 
 ## Features
 
-- 📼 Record or upload a reference audio sample (CLI or GUI).
+- 📼 Record or upload a reference audio sample (CLI or GUI) with guided scripts or freeform speech.
 - 🗣️ Clone the stored voice and synthesise new speech in English (`en`), Chinese (`zh`), or Dutch (`nl`).
 - 🖥️ Launch a Gradio web UI for an end-to-end experience.
 - 💾 Persist multiple speaker profiles for re-use.
@@ -37,7 +37,7 @@ The CLI wraps the `VoiceCloneService` class located in `voice_clone/clone.py`.
 python app.py record alice --description "Warm alto"
 ```
 
-You will be prompted to read a short passage for 10 seconds while the microphone records. The sample is saved under `voices/alice/reference.wav`.
+By default the recorder shows a short script tailored to the selected language and captures ~20 seconds of audio. Use `--freeform` if you prefer to speak naturally, `--random-prompt` for a different script, or `--prompt-text` to supply your own passage. The sample is saved under `voices/alice/reference.wav`.
 
 ### List stored voices
 
@@ -65,7 +65,15 @@ python app.py gui --engine xtts_v1
 python app.py gui
 ```
 
-The GUI runs locally (default port 7860). It allows you to record or upload a reference sample, enter text in any supported language, and generate speech. The interface stores the reference sample for later use, so you only need to record once per speaker.
+The GUI runs locally (default port 7860). It allows you to record or upload a reference sample, choose between a scripted prompt or free speech, enter text in any supported language, and generate speech. The interface stores the reference sample for later use, so you only need to record once per speaker.
+
+### How much audio do I need?
+
+- **Duration** – 20–30 seconds of clear, well-paced speech is enough for XTTS v2 to capture the voice timbre. Longer samples can help if the voice has unusual characteristics.
+- **Scripted vs. random speech** – Consistent coverage of phonemes improves quality, so a scripted prompt is recommended for best results. However, spontaneous speech also works; just keep the recording clean and vary your intonation.
+- **Environment** – Record in a quiet room with minimal background noise, avoid clipping, and speak at a steady volume.
+
+Both the CLI and GUI provide built-in prompts and instructions so you can choose whichever style fits your workflow.
 
 ## Architecture overview
 
