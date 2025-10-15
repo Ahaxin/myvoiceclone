@@ -106,7 +106,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         reference_path = _save_gradio_audio(reference_audio)
         if reference_path is not None:
             service.save_uploaded_reference(speaker_id, reference_path, description)
-        rate, data = service.synthesize(speaker_id, text, language)
+        rate, data = service.synthesize(speaker_id, text, language, description=description)
         _set_last_language(speaker_id, language)
         return rate, data
 
@@ -262,9 +262,12 @@ def launch_gui(service: VoiceCloneService) -> None:
 
     # Launch the app; disable analytics when supported, otherwise fall back.
     try:
-        demo.launch(analytics_enabled=False)
+        demo.launch(analytics_enabled=False, server_name="127.0.0.1")
     except TypeError:
-        demo.launch()
+        try:
+            demo.launch(server_name="127.0.0.1")
+        except TypeError:
+            demo.launch()
 
 
 def cli(argv: list[str] | None = None) -> None:
@@ -322,6 +325,11 @@ def cli(argv: list[str] | None = None) -> None:
         default=None,
         help="Optional output wav file. If omitted an auto generated path within the speaker folder is used.",
     )
+    speak_parser.add_argument(
+        "--description",
+        default=None,
+        help="Optional description used to build the output filename when --output is not provided.",
+    )
 
     subparsers.add_parser("gui", help="Launch the Gradio web interface")
 
@@ -358,7 +366,13 @@ def cli(argv: list[str] | None = None) -> None:
                 )
             )
     elif args.command == "speak":
-        output = service.synthesize_to_file(args.speaker, args.text, args.language, args.output)
+        output = service.synthesize_to_file(
+            args.speaker,
+            args.text,
+            args.language,
+            args.output,
+            description=args.description,
+        )
         print(f"Synthesised speech saved to {output}")
     elif args.command == "gui":
         launch_gui(service)
@@ -368,4 +382,3 @@ def cli(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     cli()
-

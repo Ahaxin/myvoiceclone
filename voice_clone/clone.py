@@ -13,6 +13,8 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 from TTS.api import TTS
+from datetime import datetime
+import re
 
 SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
     "en": {"label": "English", "tts_code": "en"},
@@ -258,6 +260,7 @@ class VoiceCloneService:
         text: str,
         language: str = "en",
         file_path: Optional[Path] = None,
+        description: Optional[str] = None,
     ) -> Path:
         """Generate speech for the given text using the cloned voice."""
 
@@ -270,7 +273,16 @@ class VoiceCloneService:
             raise FileNotFoundError(f"No reference audio found for speaker '{speaker_id}'.")
 
         if file_path is None:
-            file_path = voice_dir / f"output_{abs(hash(text))}.wav"
+            def _slugify(s: str) -> str:
+                s = s.strip().lower()
+                s = re.sub(r"\s+", "_", s)
+                s = re.sub(r"[^a-z0-9_\-]", "", s)
+                return s[:60] or "output"
+
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            base = (description or text[:40]).strip()
+            file_name = f"{ts}_{_slugify(base)}.wav"
+            file_path = voice_dir / file_name
 
         self.tts.tts_to_file(
             text=text,
@@ -280,11 +292,11 @@ class VoiceCloneService:
         )
         return file_path
 
-    def synthesize(self, speaker_id: str, text: str, language: str = "en") -> tuple[int, np.ndarray]:
+    def synthesize(self, speaker_id: str, text: str, language: str = "en", description: Optional[str] = None) -> tuple[int, np.ndarray]:
         """Generate speech and return it as raw audio."""
 
-        file_path = self.synthesize_to_file(speaker_id, text, language)
-        data, rate = sf.read(file_path)
+        file_path = self.synthesize_to_file(speaker_id, text, language, description=description)
+        data, rate = sf.read(file_path, dtype="int16")
         return rate, data
 
 __all__ = [
