@@ -49,19 +49,37 @@ def normalise_language(language: str) -> str:
 
 REFERENCE_PROMPTS: Dict[str, list[str]] = {
     "en": [
-        "The quick brown fox jumps over the lazy dog while clear bells ring in the distant valley.",
-        "Technology moves quickly, but a calm voice can make even complex topics feel simple.",
-        "Please read this short script so we can learn the tone, pacing, and clarity of your voice.",
+        (
+            "Hello there, I'm speaking at a relaxed pace so you can hear the gentle rise and fall of my"
+            " everyday tone. I start by sharing how my mornings unfold, from the first sip of coffee to a"
+            " quiet walk outside where the air feels calm and bright. As I move into describing the work I"
+            " love and the teammates I collaborate with, notice how my voice keeps a steady rhythm, how"
+            " certain words stretch slightly for warmth, and how every pause gives space without breaking"
+            " the flow. I finish by talking about the creative projects that excite me, the challenges that"
+            " spark curiosity, and the laughter that lightens serious moments, ending with a friendly"
+            " cadence you can almost see as a smile."
+        )
     ],
     "zh": [
-        "欢迎来到语音克隆演示，请保持自然语速并清晰地朗读每一个词。",
-        "普通话的声调很重要，请在安静的环境里朗读这段文字。",
-        "请在二十秒内介绍一下自己，保持声音稳定而自然。",
+        (
+            "大家好，我会用自然平稳的语速介绍自己的日常节奏，从清晨舒展身体的晨练，到冲泡一杯暖暖"
+            " 的咖啡，再到坐下来规划今天的任务。接着我谈到与团队合作时的角色，如何耐心倾听、温柔回"
+            " 应，并在需要强调重点时让语调轻轻升高又缓缓落下，让人感到安心。然后我分享最近阅读的书"
+            " 和喜欢的音乐，还描述与朋友聚会时愉快的笑声。整个叙述保持清晰、柔和而富有表情，最后以"
+            " 略带微笑的尾音收束，让听者感到亲切自然。"
+        )
     ],
     "nl": [
-        "Welkom bij deze stemklonende demo, spreek rustig en duidelijk elke zin uit.",
-        "Vertel in je eigen woorden wat je vandaag van plan bent, met een natuurlijke intonatie.",
-        "Lees deze korte tekst voor zodat we jouw stemkleur goed kunnen vastleggen.",
+        (
+            "Hallo, ik spreek op een rustig tempo terwijl ik vertel hoe mijn ochtend begint, van het zetten"
+            " van koffie tot het moment waarop ik de frisse buitenlucht inadem tijdens een korte wandeling."
+            " Daarna neem ik je mee naar mijn werkdag, waar ik met collega's ideeën uitwissel, met aandacht"
+            " luister en met vertrouwen mijn eigen inzichten deel. Je hoort hoe mijn stem iets hoger klinkt"
+            " wanneer ik enthousiasme toon en weer terugzakt naar een warme, gelijkmatige toon om het verhaal"
+            " vloeiend te houden. Tot slot beschrijf ik mijn vrije tijd: wandelen in het park, nieuwe"
+            " recepten uitproberen en samen lachen om kleine grappen, allemaal uitgesproken met duidelijke"
+            " maar vriendelijke articulatie die mijn persoonlijke stijl laat horen."
+        )
     ],
 }
 
