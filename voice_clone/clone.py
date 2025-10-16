@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import random
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, Optional
 
@@ -89,11 +89,19 @@ class VoiceProfile:
 
     speaker_id: str
     reference_path: Path
-    description: str
+    description: str = ""
+    metadata: Dict[str, object] = field(default_factory=dict)
 
     @property
     def metadata_path(self) -> Path:
         return self.reference_path.with_name("metadata.json")
+
+    @property
+    def last_language(self) -> Optional[str]:
+        code = self.metadata.get("last_language") if self.metadata else None
+        if isinstance(code, str) and code in SUPPORTED_LANGUAGES:
+            return code
+        return None
 
 
 class VoiceCloneService:
@@ -152,24 +160,46 @@ class VoiceCloneService:
 
     def list_voices(self) -> Iterable[VoiceProfile]:
         for path in self.base_dir.iterdir():
+            if not path.is_dir():
+                continue
             reference = path / "reference.wav"
             if reference.exists():
-                description = ""
-                metadata_path = path / "metadata.json"
-                if metadata_path.exists():
-                    metadata = json.loads(metadata_path.read_text())
-                    description = metadata.get("description", "")
-                yield VoiceProfile(path.name, reference, description)
+                metadata = self._read_metadata(path / "metadata.json")
+                description = metadata.get("description", "") if metadata else ""
+                yield VoiceProfile(path.name, reference, description, metadata=metadata)
 
-    def _write_metadata(self, voice: VoiceProfile) -> None:
-        metadata = {"speaker_id": voice.speaker_id, "description": voice.description}
-        voice.metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+    def _read_metadata(self, metadata_path: Path) -> Dict[str, object]:
+        if not metadata_path.exists():
+            return {}
+        try:
+            return json.loads(metadata_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+
+    def _write_metadata(
+        self,
+        voice: VoiceProfile,
+        extra: Optional[Dict[str, object]] = None,
+    ) -> None:
+        metadata = self._read_metadata(voice.metadata_path)
+        metadata.update(
+            {
+                "speaker_id": voice.speaker_id,
+                "description": voice.description,
+            }
+        )
+        if extra:
+            metadata.update(extra)
+        voice.metadata_path.write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     def create_voice_profile(
         self,
         speaker_id: str,
         reference_wav: Path,
         description: str = "",
+        language: Optional[str] = None,
     ) -> VoiceProfile:
         """Store a reference recording for a speaker."""
 
@@ -177,8 +207,15 @@ class VoiceCloneService:
         destination.mkdir(parents=True, exist_ok=True)
         stored_reference = destination / "reference.wav"
         shutil.copy2(reference_wav, stored_reference)
-        profile = VoiceProfile(speaker_id=speaker_id, reference_path=stored_reference, description=description)
-        self._write_metadata(profile)
+        profile = VoiceProfile(
+            speaker_id=speaker_id,
+            reference_path=stored_reference,
+            description=description,
+        )
+        extra = {}
+        if language:
+            extra["last_language"] = normalise_language(language)
+        self._write_metadata(profile, extra=extra or None)
         return profile
 
     # ------------------------------------------------------------------
@@ -242,14 +279,32 @@ class VoiceCloneService:
         sd.wait()
         sf.write(reference_file, audio, self.sample_rate)
 
-        profile = VoiceProfile(speaker_id=speaker_id, reference_path=reference_file, description=description)
-        self._write_metadata(profile)
+        profile = VoiceProfile(
+            speaker_id=speaker_id,
+            reference_path=reference_file,
+            description=description,
+        )
+        self._write_metadata(
+            profile,
+            extra={"last_language": canonical_language},
+        )
         return profile
 
-    def save_uploaded_reference(self, speaker_id: str, audio_path: Path, description: str = "") -> VoiceProfile:
+    def save_uploaded_reference(
+        self,
+        speaker_id: str,
+        audio_path: Path,
+        description: str = "",
+        language: Optional[str] = None,
+    ) -> VoiceProfile:
         """Persist a reference sample provided by the GUI."""
 
-        return self.create_voice_profile(speaker_id, audio_path, description)
+        return self.create_voice_profile(
+            speaker_id,
+            audio_path,
+            description,
+            language=language,
+        )
 
     # ------------------------------------------------------------------
     # Synthesis helpers
