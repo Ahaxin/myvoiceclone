@@ -48,6 +48,7 @@ MyVoiceClone is a small demo project that records a short reference clip from a 
 
    Notes:
    - Recommended Python: 3.10 or 3.11 (64‑bit). TTS wheels may be unavailable on 3.12+ for Windows.
+   - Render deploys default to Python 3.13, which currently lacks compatible TTS wheels. Add a `runtime.txt` containing `3.10.14` (already included in this repo) so Render installs Python 3.10 during builds.
    - If you still see “No matching distribution found for TTS”, try: `pip install "TTS==0.15.3"` before installing the rest.
 
 2. (Optional) Confirm that your microphone works with the `sounddevice` package.
