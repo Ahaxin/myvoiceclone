@@ -10,11 +10,19 @@ from pathlib import Path
 from typing import Dict, Iterable, Optional
 
 import numpy as np
-import sounddevice as sd
 import soundfile as sf
 from TTS.api import TTS
 from datetime import datetime
 import re
+
+try:
+    import sounddevice as sd
+    _SOUNDDEVICE_IMPORT_ERROR: Exception | None = None
+except (ImportError, OSError) as exc:  # pragma: no cover - import guard
+    sd = None  # type: ignore[assignment]
+    _SOUNDDEVICE_IMPORT_ERROR = exc
+
+_HAS_SOUNDDEVICE = sd is not None
 
 SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
     "en": {"label": "English", "tts_code": "en"},
@@ -99,6 +107,10 @@ AVAILABLE_ENGINES: Dict[str, str] = {
 }
 
 DEFAULT_ENGINE = "xtts_v2"
+
+
+class MicrophoneUnavailableError(RuntimeError):
+    """Raised when microphone recording is not possible in the current environment."""
 
 
 @dataclass
@@ -293,6 +305,16 @@ class VoiceCloneService:
                 % (speaker_id, self.record_seconds)
             )
 
+        if not _HAS_SOUNDDEVICE:
+            message = (
+                "Microphone recording is unavailable because the 'sounddevice' package could not load "
+                "the PortAudio library. Install the system PortAudio dependency (e.g. 'apt-get install "
+                "libportaudio2') and reinstall sounddevice, or upload a reference wav file instead."
+            )
+            if _SOUNDDEVICE_IMPORT_ERROR is not None:
+                raise MicrophoneUnavailableError(message) from _SOUNDDEVICE_IMPORT_ERROR
+            raise MicrophoneUnavailableError(message)
+
         audio = sd.rec(int(self.sample_rate * self.record_seconds), samplerate=self.sample_rate, channels=1)
         sd.wait()
         sf.write(reference_file, audio, self.sample_rate)
@@ -382,4 +404,5 @@ __all__ = [
     "normalise_language",
     "get_reference_prompt",
     "REFERENCE_PROMPTS",
+    "MicrophoneUnavailableError",
 ]

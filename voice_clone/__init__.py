@@ -4,6 +4,7 @@ from .clone import (
     AVAILABLE_ENGINES,
     DEFAULT_ENGINE,
     LANGUAGE_ALIASES,
+    MicrophoneUnavailableError,
     REFERENCE_PROMPTS,
     SUPPORTED_LANGUAGES,
     VoiceCloneService,
@@ -20,4 +21,5 @@ __all__ = [
     "normalise_language",
     "get_reference_prompt",
     "REFERENCE_PROMPTS",
+    "MicrophoneUnavailableError",
 ]

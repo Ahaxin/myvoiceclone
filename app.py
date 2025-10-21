@@ -17,6 +17,7 @@ from voice_clone import (
     AVAILABLE_ENGINES,
     DEFAULT_ENGINE,
     LANGUAGE_ALIASES,
+    MicrophoneUnavailableError,
     REFERENCE_PROMPTS,
     SUPPORTED_LANGUAGES,
     VoiceCloneService,
@@ -611,14 +612,17 @@ def cli(argv: list[str] | None = None) -> None:
     )
 
     if args.command == "record":
-        profile = service.record_reference(
-            args.speaker,
-            description=args.description,
-            language=args.language,
-            scripted=not args.freeform,
-            prompt_text=args.prompt_text,
-            random_prompt=args.random_prompt,
-        )
+        try:
+            profile = service.record_reference(
+                args.speaker,
+                description=args.description,
+                language=args.language,
+                scripted=not args.freeform,
+                prompt_text=args.prompt_text,
+                random_prompt=args.random_prompt,
+            )
+        except MicrophoneUnavailableError as exc:
+            raise SystemExit(str(exc))
         print(f"Recorded reference stored at {profile.reference_path}")
     elif args.command == "list":
         voices = list(service.list_voices())
