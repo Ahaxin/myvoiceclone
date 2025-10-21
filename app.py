@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tempfile
 import textwrap
 from pathlib import Path
@@ -400,13 +401,28 @@ def launch_gui(service: VoiceCloneService) -> None:
         )
 
     # Launch the app; disable analytics when supported, otherwise fall back.
+    host = os.environ.get("HOST", "0.0.0.0")
+    default_port = 7860
+    port_value = os.environ.get("PORT", str(default_port))
     try:
-        demo.launch(analytics_enabled=False, server_name="127.0.0.1")
-    except TypeError:
+        port = int(port_value)
+    except (TypeError, ValueError):
+        port = default_port
+
+    launch_variants = [
+        {"analytics_enabled": False, "server_name": host, "server_port": port},
+        {"server_name": host, "server_port": port},
+        {"server_port": port},
+        {"server_name": host},
+        {},
+    ]
+
+    for kwargs in launch_variants:
         try:
-            demo.launch(server_name="127.0.0.1")
+            demo.launch(**kwargs)
+            break
         except TypeError:
-            demo.launch()
+            continue
 
 
 def _cli_examples() -> str:
