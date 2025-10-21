@@ -407,6 +407,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         key in os.environ
         for key in ("RENDER", "RENDER_EXTERNAL_HOSTNAME", "RENDER_SERVICE_NAME")
     )
+    port_env = os.environ.get("PORT")
 
     host: str | None = None
     if host_env:
@@ -420,9 +421,9 @@ def launch_gui(service: VoiceCloneService) -> None:
             host = None
 
     if host is None:
-        host = "0.0.0.0" if running_on_render else "127.0.0.1"
+        host = "0.0.0.0" if running_on_render or port_env else "127.0.0.1"
     default_port = 7860
-    port_value = os.environ.get("PORT", str(default_port))
+    port_value = port_env if port_env is not None else str(default_port)
     try:
         port = int(port_value)
     except (TypeError, ValueError):
@@ -436,6 +437,10 @@ def launch_gui(service: VoiceCloneService) -> None:
         {},
     ]
 
+    print(
+        "[debug] HOST=%r PORT=%r running_on_render=%s -> binding to %s:%s"
+        % (host_env, port_env, running_on_render, host, port)
+    )
     print(f"Starting MyVoiceClone GUI on {host}:{port} (Render={running_on_render})")
     for kwargs in launch_variants:
         try:
