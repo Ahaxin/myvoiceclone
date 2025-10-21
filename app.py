@@ -401,7 +401,17 @@ def launch_gui(service: VoiceCloneService) -> None:
         )
 
     # Launch the app; disable analytics when supported, otherwise fall back.
-    host = os.environ.get("HOST", "0.0.0.0")
+    host_env = os.environ.get("HOST")
+    running_on_render = any(
+        key in os.environ
+        for key in ("RENDER", "RENDER_EXTERNAL_HOSTNAME", "RENDER_SERVICE_NAME")
+    )
+    if host_env:
+        host = host_env
+    elif running_on_render:
+        host = "0.0.0.0"
+    else:
+        host = "127.0.0.1"
     default_port = 7860
     port_value = os.environ.get("PORT", str(default_port))
     try:
