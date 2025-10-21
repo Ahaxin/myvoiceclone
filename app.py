@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import textwrap
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -406,12 +407,20 @@ def launch_gui(service: VoiceCloneService) -> None:
         key in os.environ
         for key in ("RENDER", "RENDER_EXTERNAL_HOSTNAME", "RENDER_SERVICE_NAME")
     )
+
+    host: str | None = None
     if host_env:
-        host = host_env
-    elif running_on_render:
-        host = "0.0.0.0"
-    else:
-        host = "127.0.0.1"
+        try:
+            # Some platforms (including Render) set HOST to the public hostname, which
+            # cannot be bound directly. Only honour the variable when it contains a
+            # valid IP literal and fall back to 0.0.0.0 otherwise.
+            ip_address(host_env)
+            host = host_env
+        except ValueError:
+            host = None
+
+    if host is None:
+        host = "0.0.0.0" if running_on_render else "127.0.0.1"
     default_port = 7860
     port_value = os.environ.get("PORT", str(default_port))
     try:
@@ -427,6 +436,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         {},
     ]
 
+    print(f"Starting MyVoiceClone GUI on {host}:{port} (Render={running_on_render})")
     for kwargs in launch_variants:
         try:
             demo.launch(**kwargs)
