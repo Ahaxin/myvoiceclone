@@ -423,7 +423,7 @@ def launch_gui(service: VoiceCloneService) -> None:
 
     if host is None:
         host = "0.0.0.0" if running_on_render or port_env else "127.0.0.1"
-    default_port = 7860
+    default_port = 10000
     port_value = port_env if port_env is not None else str(default_port)
     try:
         port = int(port_value)
