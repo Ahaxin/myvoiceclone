@@ -10,6 +10,7 @@ import textwrap
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Dict, Optional
+import inspect
 
 import gradio as gr
 import numpy as np
@@ -429,25 +430,40 @@ def launch_gui(service: VoiceCloneService) -> None:
     except (TypeError, ValueError):
         port = default_port
 
-    launch_variants = [
-        {"analytics_enabled": False, "server_name": host, "server_port": port},
-        {"server_name": host, "server_port": port},
-        {"server_port": port},
-        {"server_name": host},
-        {},
-    ]
+    # Build launch kwargs that are compatible with the installed gradio version
+    desired_kwargs = {
+        "server_name": host,
+        "server_port": port,
+        # Prefer to disable analytics/telemetry when supported
+        "analytics_enabled": False,
+        # Do not try to open a browser in server environments
+        "inbrowser": False,
+        # Avoid sharing/public tunnels on hosted platforms
+        "share": False,
+        # Be explicit for some versions
+        "show_api": False,
+    }
+
+    sig = inspect.signature(getattr(demo, "launch"))
+    supported = set(sig.parameters.keys())
+    filtered_kwargs = {k: v for k, v in desired_kwargs.items() if k in supported}
 
     print(
-        "[debug] HOST=%r PORT=%r running_on_render=%s -> binding to %s:%s"
-        % (host_env, port_env, running_on_render, host, port)
+        "[debug] HOST=%r PORT=%r running_on_render=%s -> binding to %s:%s | launch args=%s"
+        % (host_env, port_env, running_on_render, host, port, sorted(filtered_kwargs.keys()))
     )
     print(f"Starting MyVoiceClone GUI on {host}:{port} (Render={running_on_render})")
-    for kwargs in launch_variants:
-        try:
-            demo.launch(**kwargs)
-            break
-        except TypeError:
-            continue
+
+    try:
+        demo.launch(**filtered_kwargs)
+    except TypeError as exc:
+        # Surface a clear error instead of silently doing nothing, so Render logs it
+        missing = set(filtered_kwargs.keys()) - supported
+        raise SystemExit(
+            "Failed to launch Gradio app due to unexpected launch() signature. "
+            f"Supported params: {sorted(supported)} | Tried params: {sorted(filtered_kwargs.keys())} | "
+            f"Unrecognised: {sorted(missing)} | Error: {exc}"
+        )
 
 
 def _cli_examples() -> str:
