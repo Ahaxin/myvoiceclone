@@ -122,3 +122,15 @@ Both the CLI and GUI provide built-in prompts and instructions so you can choose
 - Recording requires a functional microphone and may need input device selection on some systems.
 - The XTTS model performs best with clear, clean reference recordings. Noisy inputs can reduce quality.
 - Additional languages supported by XTTS can be exposed by updating `SUPPORTED_LANGUAGES`.
+
+## Deploying to Vercel (Container)
+
+Vercel’s serverless Python functions aren’t suited for long‑lived Gradio servers. Deploy this app on Vercel using the included Dockerfile so it can bind to the platform’s `PORT`.
+
+- The repository includes a `Dockerfile` that runs `python app.py` and listens on `0.0.0.0:$PORT`.
+- Create a new Vercel project from this repository; Vercel will auto‑detect the Dockerfile and build a container.
+- No extra configuration is required. The app logs will show the selected host/port when it boots.
+
+Notes:
+- Microphone recording inside containers may require PortAudio. Uncomment the `libportaudio2` install lines in `Dockerfile` if you need mic recording in the container. Uploading reference `.wav` files works without it.
+- Large ML dependencies can exceed free‑tier limits. If builds time out or the image is too big, consider prebuilding and pushing to a registry, upgrading the plan, or using a platform geared for larger images.

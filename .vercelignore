@@ -1,0 +1,19 @@
+# Reduce upload/build context on Vercel
+.git/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Generated audio and local voice profiles are not needed at build time
+voices/
+*.wav
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
