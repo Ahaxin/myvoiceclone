@@ -1,0 +1,7 @@
+{
+  "framework": "other",
+  "git": {
+    "deployOnPush": true
+  }
+}
+
