@@ -1,7 +1,9 @@
 {
-  "framework": "other",
+  "version": 2,
+  "builds": [
+    { "src": "Dockerfile", "use": "@vercel/docker" }
+  ],
   "git": {
     "deployOnPush": true
   }
 }
-

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: myvoiceclone
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: HOST
+        value: 0.0.0.0
+
