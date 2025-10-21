@@ -10,7 +10,16 @@ import textwrap
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Dict, Optional
+import warnings
 import inspect
+
+# Suppress noisy gradio_client documentation warnings about gradio.mix.*
+warnings.filterwarnings(
+    "ignore",
+    message=r"Could not get documentation group for .*gradio\.mix",
+    category=UserWarning,
+    module=r"gradio_client\.documentation",
+)
 
 import gradio as gr
 import numpy as np
@@ -423,7 +432,7 @@ def launch_gui(service: VoiceCloneService) -> None:
 
     if host is None:
         host = "0.0.0.0" if running_on_render or port_env else "127.0.0.1"
-    default_port = 10000
+    default_port = 7860
     port_value = port_env if port_env is not None else str(default_port)
     try:
         port = int(port_value)
