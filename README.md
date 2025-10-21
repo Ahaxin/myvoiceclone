@@ -99,6 +99,8 @@ python app.py gui --engine xtts_v1
 python app.py gui
 ```
 
+> 💡 Tip: running `python app.py` without a sub-command now launches the GUI automatically. This is handy for platforms such as Render that expect the process to start a web server on the assigned `$PORT`.
+
 The GUI runs locally (default port 7860). It allows you to record or upload a reference sample, choose between a scripted prompt or free speech, enter text in any supported language, and generate speech. The interface stores the reference sample for later use, so you only need to record once per speaker.
 
 ### How much audio do I need?

@@ -567,13 +567,21 @@ def build_parser() -> tuple[argparse.ArgumentParser, Dict[str, argparse.Argument
     help_parser.add_argument("topic", nargs="?", help="Command to describe in detail")
     command_parsers["help"] = help_parser
 
-    subparsers.required = True
+    # Allow running the script without an explicit sub-command. When no
+    # command is provided (e.g. the deploy platform invokes `python app.py`),
+    # the CLI will default to launching the GUI. This keeps the more explicit
+    # sub-commands available for power users while ensuring hosted
+    # environments start a web server and bind to the expected port.
+    subparsers.required = False
     return parser, command_parsers
 
 
 def cli(argv: list[str] | None = None) -> None:
     parser, command_parsers = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command is None:
+        args.command = "gui"
 
     def _print_languages() -> None:
         alias_map: Dict[str, list[str]] = {}
