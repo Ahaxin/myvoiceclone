@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11.0
 
 # Prevent python from buffering stdout/stderr
 ENV PYTHONUNBUFFERED=1 \
