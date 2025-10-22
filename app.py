@@ -38,6 +38,15 @@ from voice_clone import (
 )
 
 
+# Simple step logger to trace progress through startup and CLI actions
+def log_step(message: str) -> None:
+    try:
+        print(f"[step] {message}")
+    except Exception:
+        # Printing should never break execution
+        pass
+
+
 LANGUAGE_LABELS: Dict[str, str] = {data["label"]: code for code, data in SUPPORTED_LANGUAGES.items()}
 DEFAULT_LANGUAGE_LABEL = SUPPORTED_LANGUAGES["en"]["label"]
 
@@ -71,6 +80,7 @@ def _save_gradio_audio(audio: Optional[tuple[int, np.ndarray]]) -> Optional[Path
 
 def launch_gui(service: VoiceCloneService) -> None:
     """Launch a Gradio based GUI for recording and synthesising voices."""
+    log_step("Launching GUI: preparing components and state")
 
     def _build_speaker_library() -> Dict[str, Dict[str, object]]:
         library: Dict[str, Dict[str, object]] = {}
@@ -105,6 +115,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         reference_audio,
         description: str,
     ):
+        log_step("[GUI] Generate: validating inputs")
         speaker_id = speaker_id.strip()
         if not speaker_id:
             raise gr.Error("Please enter a speaker id (e.g. your name).")
@@ -120,9 +131,11 @@ def launch_gui(service: VoiceCloneService) -> None:
             engine = ENGINE_LABELS[engine_label]
         except KeyError as exc:
             raise gr.Error("Unsupported engine selection.") from exc
+        log_step(f"[GUI] Generate: using engine={engine} lang={language}")
         service.set_engine(engine)
         reference_path = _save_gradio_audio(reference_audio)
         if reference_path is not None:
+            log_step("[GUI] Generate: saving uploaded reference")
             service.save_uploaded_reference(
                 speaker_id,
                 reference_path,
@@ -134,6 +147,7 @@ def launch_gui(service: VoiceCloneService) -> None:
             except OSError:
                 pass
         try:
+            log_step("[GUI] Generate: synthesising audio")
             rate, data = service.synthesize(
                 speaker_id, text, language, description=description
             )
@@ -141,6 +155,7 @@ def launch_gui(service: VoiceCloneService) -> None:
             raise gr.Error(
                 "No reference found for this speaker yet. Please record or upload a sample first."
             ) from exc
+        log_step("[GUI] Generate: synthesis complete")
         _set_last_language(speaker_id, language)
         return rate, data
 
@@ -179,6 +194,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         return _build_prompt(language_label, style_label, randomise=True)
 
     def save_only(speaker_id: str, reference_audio, description: str, language_label: str):
+        log_step("[GUI] Save reference: start")
         speaker_id = speaker_id.strip()
         if not speaker_id:
             raise gr.Error("Please enter a speaker id (e.g. your name).")
@@ -190,6 +206,7 @@ def launch_gui(service: VoiceCloneService) -> None:
             lang_code = LANGUAGE_LABELS[language_label]
         except KeyError:
             lang_code = "en"
+        log_step(f"[GUI] Save reference: speaker={speaker_id} lang={lang_code}")
         service.save_uploaded_reference(
             speaker_id,
             reference_path,
@@ -201,6 +218,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         except OSError:
             pass
         _set_last_language(speaker_id, lang_code)
+        log_step("[GUI] Save reference: done")
         return gr.update(
             visible=True,
             value=f"Saved reference for '{speaker_id}'. You can now generate without re-recording.",
@@ -247,8 +265,10 @@ def launch_gui(service: VoiceCloneService) -> None:
             gr.update(visible=True, value=summary_text),
         )
 
+    log_step("Building speaker library")
     initial_library = _build_speaker_library()
 
+    log_step("Constructing Gradio Blocks UI")
     with gr.Blocks(
         title="MyVoiceClone",
         theme=gr.themes.Soft(primary_hue="purple", secondary_hue="cyan"),
@@ -412,6 +432,7 @@ def launch_gui(service: VoiceCloneService) -> None:
         )
 
     # Launch the app; disable analytics when supported, otherwise fall back.
+    log_step("Computing server host/port from environment")
     host_env = os.environ.get("HOST")
     running_on_render = any(
         key in os.environ
@@ -456,6 +477,10 @@ def launch_gui(service: VoiceCloneService) -> None:
     sig = inspect.signature(getattr(demo, "launch"))
     supported = set(sig.parameters.keys())
     filtered_kwargs = {k: v for k, v in desired_kwargs.items() if k in supported}
+    log_step(
+        "Server config ready: host=%s port=%s args=%s"
+        % (host, port, ",".join(sorted(filtered_kwargs.keys())))
+    )
 
     print(
         "[debug] HOST=%r PORT=%r running_on_render=%s -> binding to %s:%s | launch args=%s"
@@ -463,7 +488,20 @@ def launch_gui(service: VoiceCloneService) -> None:
     )
     print(f"Starting MyVoiceClone GUI on {host}:{port} (Render={running_on_render})")
 
+    # Ensure we ALWAYS print a ready message once the server actually starts
     try:
+        app_obj = getattr(demo, "app", None)
+        if app_obj is not None and hasattr(app_obj, "on_event"):
+            @app_obj.on_event("startup")  # type: ignore[attr-defined]
+            async def _on_startup_log():
+                # This runs when the FastAPI app finishes starting up
+                print(f"[ready] Server started successfully on {host}:{port}")
+    except Exception:
+        # Never fail startup logging; best-effort only
+        pass
+
+    try:
+        log_step("Launching Gradio server")
         demo.launch(**filtered_kwargs)
     except TypeError as exc:
         # Surface a clear error instead of silently doing nothing, so Render logs it
@@ -627,11 +665,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, Dict[str, argparse.Argument
 
 
 def cli(argv: list[str] | None = None) -> None:
+    log_step("Starting CLI entrypoint")
     parser, command_parsers = build_parser()
     args = parser.parse_args(argv)
 
     if args.command is None:
         args.command = "gui"
+    log_step(f"Selected command: {args.command}")
 
     def _print_languages() -> None:
         alias_map: Dict[str, list[str]] = {}
@@ -671,21 +711,26 @@ def cli(argv: list[str] | None = None) -> None:
         return
 
     if args.command == "languages":
+        log_step("Printing supported languages")
         _print_languages()
         return
 
     if args.command == "prompts":
+        log_step("Showing reference prompts")
         _handle_prompts(args.language, args.all, args.random)
         return
 
+    log_step("Initialising voice clone service")
     service = VoiceCloneService(
         engine=args.engine,
         model_name=args.model,
         base_dir=args.base_dir,
         use_cuda=args.cuda,
     )
+    log_step("Service initialised")
 
     if args.command == "record":
+        log_step("Recording new reference from microphone")
         try:
             profile = service.record_reference(
                 args.speaker,
@@ -699,6 +744,7 @@ def cli(argv: list[str] | None = None) -> None:
             raise SystemExit(str(exc))
         print(f"Recorded reference stored at {profile.reference_path}")
     elif args.command == "list":
+        log_step("Listing stored voices")
         voices = list(service.list_voices())
         if args.json:
             serialised = [
@@ -729,6 +775,7 @@ def cli(argv: list[str] | None = None) -> None:
             + ", ".join(f"{code} ({data['label']})" for code, data in SUPPORTED_LANGUAGES.items())
         )
     elif args.command == "speak":
+        log_step("Synthesising speech to file")
         output = service.synthesize_to_file(
             args.speaker,
             args.text,
@@ -738,6 +785,7 @@ def cli(argv: list[str] | None = None) -> None:
         )
         print(f"Synthesised speech saved to {output}")
     elif args.command == "gui":
+        log_step("Entering GUI launcher")
         launch_gui(service)
     else:
         parser.error("Unknown command")
