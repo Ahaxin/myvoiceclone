@@ -1,10 +1,16 @@
-"""Voice cloning demo application with CLI and Gradio GUI."""
+"""Voice cloning demo application with CLI and Gradio GUI.
+
+Includes a minimal debug/probe mode to quickly verify that the process binds
+to the expected HOST/PORT without importing heavy dependencies. Enable by
+setting environment variable ``DEBUG_BIND_ONLY=1`` or running ``python app.py probe``.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import sys
 import tempfile
 import textwrap
 from ipaddress import ip_address
@@ -12,6 +18,7 @@ from pathlib import Path
 from typing import Dict, Optional
 import warnings
 import inspect
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Suppress noisy gradio_client documentation warnings about gradio.mix.*
 warnings.filterwarnings(
@@ -21,9 +28,8 @@ warnings.filterwarnings(
     module=r"gradio_client\.documentation",
 )
 
-import gradio as gr
-import numpy as np
-import soundfile as sf
+# Third-party imports are intentionally deferred where possible so that
+# DEBUG_BIND_ONLY can start a lightweight server without pulling heavy deps.
 
 from voice_clone import (
     AVAILABLE_ENGINES,
@@ -69,7 +75,92 @@ REFERENCE_STYLE_LABELS: Dict[str, str] = {
 DEFAULT_REFERENCE_STYLE_LABEL = "Scripted reference (recommended)"
 
 
-def _save_gradio_audio(audio: Optional[tuple[int, np.ndarray]]) -> Optional[Path]:
+def _compute_host_port() -> tuple[str, int, bool, Optional[str], Optional[str]]:
+    host_env = os.environ.get("HOST")
+    running_on_render = any(
+        key in os.environ for key in ("RENDER", "RENDER_EXTERNAL_HOSTNAME", "RENDER_SERVICE_NAME")
+    )
+    port_env = os.environ.get("PORT")
+
+    host: str | None = None
+    if host_env:
+        try:
+            ip_address(host_env)
+            host = host_env
+        except ValueError:
+            host = None
+    if host is None:
+        host = "0.0.0.0" if running_on_render or port_env else "127.0.0.1"
+
+    default_port = 7860
+    port_value = port_env if port_env is not None else str(default_port)
+    try:
+        port = int(port_value)
+    except (TypeError, ValueError):
+        port = default_port
+
+    return host, port, running_on_render, host_env, port_env
+
+
+class _ProbeHandler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler API
+        if self.path in ("/", "/healthz", "/ping"):
+            payload = (
+                "MyVoiceClone probe server is running. "
+                f"Path={self.path} Method=GET\n"
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        else:
+            payload = b"Not Found\n"
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    def log_message(self, fmt: str, *args):  # silence default noisy logging
+        try:
+            print(f"[probe] " + fmt % args)
+        except Exception:
+            pass
+
+
+def run_bind_probe() -> None:
+    host, port, running_on_render, host_env, port_env = _compute_host_port()
+    print(
+        "[probe] HOST=%r PORT=%r running_on_render=%s -> binding to %s:%s"
+        % (host_env, port_env, running_on_render, host, port)
+    )
+    server = ThreadingHTTPServer((host, port), _ProbeHandler)
+    print(f"[probe] Listening on http://{host}:{port} (Ctrl+C to stop)")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("[probe] Stopping server")
+    finally:
+        try:
+            server.server_close()
+        except Exception:
+            pass
+
+
+# If explicitly asked to only verify binding, run the tiny probe server and exit.
+if os.environ.get("DEBUG_BIND_ONLY", "").lower() in {"1", "true", "yes"} or (
+    len(sys.argv) >= 2 and sys.argv[1] == "probe"
+):
+    run_bind_probe()
+    raise SystemExit(0)
+
+
+def _save_gradio_audio(audio):
+    # Deferred imports to avoid heavy deps during probe/debug mode
+    import numpy as np  # type: ignore
+    import soundfile as sf  # type: ignore
+
     if audio is None:
         return None
     sample_rate, data = audio
@@ -81,6 +172,10 @@ def _save_gradio_audio(audio: Optional[tuple[int, np.ndarray]]) -> Optional[Path
 def launch_gui(service: VoiceCloneService) -> None:
     """Launch a Gradio based GUI for recording and synthesising voices."""
     log_step("Launching GUI: preparing components and state")
+    # Import Gradio lazily to keep startup light (especially on Render)
+    import gradio as gr  # type: ignore
+    import numpy as np  # type: ignore
+    import soundfile as sf  # type: ignore
 
     def _build_speaker_library() -> Dict[str, Dict[str, object]]:
         library: Dict[str, Dict[str, object]] = {}
@@ -112,7 +207,9 @@ def launch_gui(service: VoiceCloneService) -> None:
         language_label: str,
         engine_label: str,
         speaker_id: str,
-        reference_audio,
+        reference_mode: str,
+        record_audio,
+        upload_audio,
         description: str,
     ):
         log_step("[GUI] Generate: validating inputs")
@@ -133,7 +230,8 @@ def launch_gui(service: VoiceCloneService) -> None:
             raise gr.Error("Unsupported engine selection.") from exc
         log_step(f"[GUI] Generate: using engine={engine} lang={language}")
         service.set_engine(engine)
-        reference_path = _save_gradio_audio(reference_audio)
+        selected_audio = record_audio if reference_mode == "Record" else upload_audio
+        reference_path = _save_gradio_audio(selected_audio)
         if reference_path is not None:
             log_step("[GUI] Generate: saving uploaded reference")
             service.save_uploaded_reference(
@@ -193,12 +291,13 @@ def launch_gui(service: VoiceCloneService) -> None:
     def randomise_prompt(language_label: str, style_label: str) -> tuple[str, str]:
         return _build_prompt(language_label, style_label, randomise=True)
 
-    def save_only(speaker_id: str, reference_audio, description: str, language_label: str):
+    def save_only(speaker_id: str, reference_mode: str, record_audio, upload_audio, description: str, language_label: str):
         log_step("[GUI] Save reference: start")
         speaker_id = speaker_id.strip()
         if not speaker_id:
             raise gr.Error("Please enter a speaker id (e.g. your name).")
-        reference_path = _save_gradio_audio(reference_audio)
+        selected_audio = record_audio if reference_mode == "Record" else upload_audio
+        reference_path = _save_gradio_audio(selected_audio)
         if reference_path is None:
             raise gr.Error("Please record or upload a reference sample to save.")
         description = description.strip() if isinstance(description, str) else ""
@@ -346,12 +445,22 @@ def launch_gui(service: VoiceCloneService) -> None:
                 reference_instructions = gr.Markdown(
                     "Read the script aloud for about 20–30 seconds. Switch to Free speech sample to improvise instead.",
                 )
-
-                reference = gr.Audio(
-                    sources=["microphone", "upload"],
+                reference_mode = gr.Radio(
+                    choices=["Record", "Upload"],
+                    value="Record",
+                    label="Reference input method",
+                )
+                with gr.Row():
+                    record_audio = gr.Audio(
+                        source="microphone",
+                        type="numpy",
+                        label="Record reference",
+                    )
+                upload_audio = gr.Audio(
+                    source="upload",
                     type="numpy",
-                    label="Reference sample",
-                    show_download_button=False,
+                    label="Upload reference",
+                    visible=False,
                 )
                 with gr.Row():
                     save_button = gr.Button("Save reference only", variant="secondary")
@@ -379,7 +488,7 @@ def launch_gui(service: VoiceCloneService) -> None:
 
         generate_button.click(
             generate,
-            inputs=[text, language, engine, speaker, reference, description],
+            inputs=[text, language, engine, speaker, reference_mode, record_audio, upload_audio, description],
             outputs=output_audio,
         ).then(
             refresh_existing,
@@ -405,7 +514,7 @@ def launch_gui(service: VoiceCloneService) -> None:
 
         save_button.click(
             save_only,
-            inputs=[speaker, reference, description, language],
+            inputs=[speaker, reference_mode, record_audio, upload_audio, description, language],
             outputs=save_status,
         ).then(
             refresh_existing,
@@ -431,34 +540,20 @@ def launch_gui(service: VoiceCloneService) -> None:
             outputs=[reference_status, speaker_summary],
         )
 
+        def _toggle_reference_inputs(mode: str):
+            if mode == "Record":
+                return gr.update(visible=True), gr.update(visible=False)
+            return gr.update(visible=False), gr.update(visible=True)
+
+        reference_mode.change(
+            _toggle_reference_inputs,
+            inputs=[reference_mode],
+            outputs=[record_audio, upload_audio],
+        )
+
     # Launch the app; disable analytics when supported, otherwise fall back.
     log_step("Computing server host/port from environment")
-    host_env = os.environ.get("HOST")
-    running_on_render = any(
-        key in os.environ
-        for key in ("RENDER", "RENDER_EXTERNAL_HOSTNAME", "RENDER_SERVICE_NAME")
-    )
-    port_env = os.environ.get("PORT")
-
-    host: str | None = None
-    if host_env:
-        try:
-            # Some platforms (including Render) set HOST to the public hostname, which
-            # cannot be bound directly. Only honour the variable when it contains a
-            # valid IP literal and fall back to 0.0.0.0 otherwise.
-            ip_address(host_env)
-            host = host_env
-        except ValueError:
-            host = None
-
-    if host is None:
-        host = "0.0.0.0" if running_on_render or port_env else "127.0.0.1"
-    default_port = 7860
-    port_value = port_env if port_env is not None else str(default_port)
-    try:
-        port = int(port_value)
-    except (TypeError, ValueError):
-        port = default_port
+    host, port, running_on_render, host_env, port_env = _compute_host_port()
 
     # Build launch kwargs that are compatible with the installed gradio version
     desired_kwargs = {
