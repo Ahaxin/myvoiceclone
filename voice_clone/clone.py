@@ -1,4 +1,10 @@
-"""Voice cloning logic built on top of Coqui TTS."""
+"""Voice cloning logic built on top of Coqui TTS.
+
+This module defers importing the heavy ``TTS`` package until it is first
+needed (lazy import) so that application startup remains fast and lightweight
+on hosting platforms (e.g. Render) that require a web server to bind to the
+assigned port quickly.
+"""
 
 from __future__ import annotations
 
@@ -7,13 +13,16 @@ import random
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
 import soundfile as sf
-from TTS.api import TTS
 from datetime import datetime
 import re
+
+# Only import TTS for type-checkers; at runtime we lazy-import in VoiceCloneService
+if TYPE_CHECKING:  # pragma: no cover - typing aid only
+    from TTS.api import TTS as _TTS  # noqa: F401
 
 try:
     import sounddevice as sd
@@ -152,16 +161,19 @@ class VoiceCloneService:
         self.sample_rate = sample_rate
         self.record_seconds = record_seconds
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        self._tts: Optional[TTS] = None
+        # Lazy-loaded TTS model instance; type is object at runtime to avoid eager import
+        self._tts: Optional[object] = None
         self._use_cuda = use_cuda
 
     @property
-    def tts(self) -> TTS:
+    def tts(self):
         """Lazily load the heavyweight TTS model."""
 
         if self._tts is None:
-            self._tts = TTS(model_name=self.model_name, gpu=self._use_cuda)
-        return self._tts
+            # Lazy import to keep startup fast and avoid failures before the server binds
+            from TTS.api import TTS as _TTS  # type: ignore
+            self._tts = _TTS(model_name=self.model_name, gpu=self._use_cuda)
+        return self._tts  # type: ignore[return-value]
 
     def _resolve_engine(self, engine: str) -> str:
         try:
